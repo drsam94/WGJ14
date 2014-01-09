@@ -11,9 +11,10 @@ var CURSE    = 3
 
 /** subtype variables */
 
-var REACTION = 0
-var ATTACK   = 1
-var NONE     = 2
+var NONE     = 0 
+var REACTION = 1
+var ATTACK   = 2
+
 
 /** card helper functions */
 
@@ -66,7 +67,7 @@ var ESTATE = {
     type   : VICTORY,
     subtype: NONE,
     effect : function(player) {},
-    vp     : 1
+    vp     : function(player) { return 1 }
 }
 
 var DUCHY  = {
@@ -75,7 +76,7 @@ var DUCHY  = {
     type   : VICTORY,
     subtype: NONE,
     effect : function(player) {},
-    vp     : 3
+    vp     : function(player) { return 3 }
 }
 
 var PROVINCE = {
@@ -84,7 +85,7 @@ var PROVINCE = {
     type   : VICTORY,
     subtype: NONE,
     effect : function(player) {},
-    vp     : 6
+    vp     : function(player) { return 5 }
 }
 
 var CURSE = {
@@ -245,5 +246,16 @@ var ADVENTURER = {
                buy:     0}
 }
 
+var GARDENS = {
+    name   : "Gardens",
+    cost   : 4,
+    type   : VICTORY,
+    subtype: NONE,
+    effect : function(player) {},
+    vp     : function(player) { return floor (player.deck.length / 10) }     
+}
+
+var NULLCARD = 666
+
 var ALLCARDS =[VILLAGE, WOODCUTTER, SMITHY, MONEYLENDER, FESTIVAL,
-              LABORATORY, WITCH, MARKET, COUNCILROOM, ADVENTURER]
+              LABORATORY, WITCH, MARKET, COUNCILROOM, ADVENTURER, GARDENS]
