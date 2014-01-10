@@ -29,7 +29,7 @@ function allOthersGain(player, card) {
 function allOthersDraw(player) {
     for (var i = 0; i < playerList.length; ++i) {
         if (i !== player.number) {
-            draw(playerList[i], 1)
+            drawCards(playerList[i], 1)
         }
     }
 }
@@ -115,9 +115,9 @@ var WOODCUTTER = {
     type   : ACTION,
     subtype: NONE,
     effect : function(player) {},
-    props  : { actions: 2,
+    props  : { actions: 0,
                cards:   0,
-               gold:    0,
+               gold:    2,
                buy:     1}
 }
 
@@ -135,13 +135,14 @@ var SMITHY = {
 
 var MONEYLENDER = {
     name   : "Money Lender",
-    cost   : 5,
+    cost   : 4,
     type   : ACTION,
     subtype: NONE,
     effect : function(player) {
         var i = player.hand.indexOf(COPPER)
-        if (i > 0) {
-            trash.push(player.hand.remove(i))
+        if (i >= 0) {
+            removeAt(player.hand,i)
+            trash.push(COPPER)
             state.gold += 3
         }
     },
@@ -255,6 +256,26 @@ var GARDENS = {
     vp     : function(player) { return floor (player.deck.length / 10) }     
 }
 
+var MINE = {
+    name   : "Mine",
+    cost   : 5,
+    type   : ACTION,
+    subtype: NONE,
+    effect : function(player) {
+        var card = askPlayerForTreasure(player)
+        if (card === NULLCARD) {
+            return
+        } else {
+            trash.push(card)
+            var gain = askPlayerToGainCard(3 + card.cost, TREASURE)
+            gainCard(player, gain)
+        }
+    },
+    props  : { actions: 0,
+               cards:   0,
+               gold:    0,
+               buy:     0}
+}
 var NULLCARD = 666
 
 var ALLCARDS =[VILLAGE, WOODCUTTER, SMITHY, MONEYLENDER, FESTIVAL,

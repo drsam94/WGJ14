@@ -60,8 +60,9 @@ function displayState() {
     fillRectangle(0,0,screenWidth,screenHeight,'white')
     fillText("Player " + (state.turn + 1) + "'s turn", screenWidth-200, 30, 'black', "bold 24px sans-serif")
     fillText("Actions: " + (state.actions), screenWidth-200, 60, 'black', "bold 24px sans-serif")
-    fillText("Buys: " + (state.buy), screenWidth-200, 90, 'black', "bold 24px sans-serif")
+    fillText("Buys: " + (state.buys), screenWidth-200, 90, 'black', "bold 24px sans-serif")
     fillText("Gold: " + (state.gold), screenWidth-200, 120,'black', "bold 24px sans-serif")
+    fillText("Deck: " + (playerList[state.turn].deck.length),screenWidth-200, 150,'black', "bold 24px sans-serif")
     for (var i = 0; i < cardsInPlay.length; ++i) {
         displayCard(cardsInPlay[i].card, (i%4)*(CARD_WIDTH*1.1),floor(i/4)*(CARD_HEIGHT*1.1), i)
     }
@@ -76,7 +77,12 @@ function displayHand() {
 
 /** Returns how many of a card are left to be purchased */
 function countInPlay(card) {
-    return cardsInPlay[pileIndex(card)].count
+    var index = pileIndex(card)
+    if (index >= 0){
+        return cardsInPlay[pileIndex(card)].count
+    } else {
+        return 0
+    }
 }
 
 /** Find the index of a card in the piles */
@@ -95,12 +101,21 @@ function pileIndex(card) {
 function gainCard(player, card) {
     if (countInPlay(card) > 0) {
         player.discard.push(card)
-        --cardsInPlay[i].count
+        --cardsInPlay[pileIndex(card)].count
         return true
     }
     return false
 }
 
+/** Returns a basic AI, that I will use for testing now */
+function AIOne() {
+    return [ { card: PROVINCE, cap: Infinity },
+             { card: GOLD,     cap: Infinity },
+             { card: LABORATORY, cap: 5},
+             { card: MONEYLENDER, cap: 1},
+             { card: SILVER,   cap: 6},
+             { card: DUCHY,    cap: Infinity}]
+}
 /** Function for generating a player object using an index for the
     player*/
 function Player(i, isHuman) {
@@ -108,7 +123,8 @@ function Player(i, isHuman) {
              deck   : startingDeck(),
              hand   : new Array(),
              discard: new Array(),
-             human  : isHuman }
+             human  : isHuman,
+             ai     : !isHuman ? AIOne() : 0 }
 }
 
 /** Returns the default starting deck */
@@ -116,6 +132,7 @@ function startingDeck() {
     return [COPPER, COPPER, COPPER, COPPER, COPPER,
             COPPER, COPPER, ESTATE, ESTATE, ESTATE]
 }
+
 /** Discards a players current hand and draws a new one */
 function newHand(player) {
     player.discard = player.discard.concat(player.hand)
@@ -203,6 +220,8 @@ function askForAction() {
     displayState()
     displayHand()
     fillText("Choose an action to play", 10, screenHeight/2 - 50, 'black','24px bold sans-serif')
+    setTouchKeyRectangle(asciiCode('N'), 10,screenHeight/2, 140, 60, "None")
+    drawTouchKeys()
     inputState = WANT_ACTION
 }
 
@@ -214,22 +233,70 @@ function containsType(hand, cardType) {
     }
     return false
 }
+
+function getBestAction(player) {
+    var ret = NULLCARD
+    for (var i = 0; i < player.hand.length; ++i) {
+        var card = player.hand[i]
+        if (card.type === ACTION) {
+            if (card.props.actions > 0) {
+                return card
+            } else {
+                ret = card
+            }
+        }
+    }
+    return ret
+}
 /** Takes a turn, either by asking a player for input or by following
  *  the rules of an AI
  */
 function takeTurn(player) {
     if (!player.human) {
-        //do AI stuff
-        return false
-    }
-    if (state.actions > 0 && containsType(player.hand, ACTION) {
-        displayState()
-        displayHand()
-        askForAction()
-    } else {
-        askForGold()
-    }
 
+        while (containsType(player.hand, ACTION) && state.actions > 0) {
+            var card = getBestAction(player)
+            playAction(player, card)
+        }
+        /** we iterate backwards so that removing cards from the hand is not an issue          */
+        /** The AI always plays all their treasures, as there is never anything bad about this */
+        for (var i = player.hand.length - 1; i >= 0; --i) {
+            if (player.hand[i].type === TREASURE) {
+                var card = player.hand[i]
+                removeAt(player.hand,i)
+                state.inPlay.push(card)
+                state.gold += card.worth
+            }
+        }
+        var priorityList = player.ai
+        while (state.buys > 0) {
+            var boughtCard = false
+            for (var i = 0; i < priorityList.length; ++i) {
+                var entry = priorityList[i]
+                if (entry.card.cost < state.gold && entry.cap > 0) {
+                    if (gainCard(player, entry.card)) {
+                        state.gold -= entry.card.cost
+                        state.buys--
+                        boughtCard = true
+                        entry.cap--
+                    }
+                }
+            }
+            if (!boughtCard) {
+                state.buys = 0
+            }
+        }
+        endTurn()
+
+    } else {
+        if (state.actions > 0 && containsType(player.hand, ACTION)) {
+            displayState()
+            displayHand()
+            askForAction()
+        } else {
+            askForGold()
+        }
+    }
 }
 
 /** Calculates the number of victory points had by the player
@@ -240,7 +307,7 @@ function calculateScore(player) {
     for (var i = 0; i < player.deck.length; ++i) {
         var card = player.deck[i]
         if (card.type === VICTORY || card.type === CURSE) {
-            score += card.vp()
+            score += card.vp(player)
         }
     }
     return score   
@@ -250,14 +317,14 @@ function calculateScore(player) {
 function applyProps(card, player) {
     state.actions += card.props.actions
     state.gold    += card.props.gold
-    state.buy     += card.props.buy
+    state.buys     += card.props.buy
     drawCards(player, card.props.cards)
 }
 
 /** EBegins the next turn of the game */
 function nextTurn() {
     state = { actions: 1,
-              buy:    1,
+              buys:    1,
               gold:    0,
               inPlay:  new Array(),
               turn: (state.turn + 1)%playerList.length}
@@ -268,12 +335,20 @@ function nextTurn() {
         for (var i = 0; i < playerList.length; ++i) {
             points.push(calculateScore(playerList[i]))
         }
-        /** Display winner, etc... */
+        var winnerIndex = 0
+        for (var i = 0; i < playerList.length; ++i) {
+            if (points[i] > points[winnerIndex]) {
+                winnerIndex = i
+            }
+        }
+        for (var i = 0; i < playerList.length; ++i) {
+            fillText("Player " + (i+1) + ": " + points[i] + (winnerIndex === i ?  " WINNER" : ""), screenWidth/2 ,screenHeight/2 + i* 60, 'black',"bold 40px sans-serif")
+        }
     }
 }
 
 function endTurn() {
-   inputState = WANT_NONE
+    inputState = WANT_NONE
     var player = playerList[state.turn]
     player.discard = player.discard.concat(state.inPlay)
     newHand(player)
@@ -282,19 +357,29 @@ function endTurn() {
 
 function onSetup() {
     inputState = WANT_NONE
-    playerList = new Array (Player(0, true), Player(1, true))
+    playerList = new Array (Player(0, true), Player(1, false))
     initializePiles(ALLCARDS)
     for (var i = 0; i < playerList.length; ++i) {
         shuffle(playerList[i].deck)
         drawCards(playerList[i], 5)
     }
     state = {turn : -1}
+    trash = new Array()
     nextTurn()
 }
 
-function clickInCard(xstart, ystart) {
+function clickInCard(xstart, ystart, x, y) {
     return (x >= xstart && x <= xstart + CARD_WIDTH &&
             y >= ystart && y <= ystart + CARD_HEIGHT)
+}
+
+function playAction(player, card) {
+    state.inPlay.push(card)
+    //removeAt(player.hand, index)
+    player.hand.remove(card)
+    state.actions--
+    applyProps(card, player)
+    card.effect(player)
 }
 
 function onClick(x, y) {
@@ -305,7 +390,7 @@ function onClick(x, y) {
         for (var i = 0; i < player.hand.length; ++i) {
             var xstart = (i%5)*CARD_WIDTH*1.1
             var ystart = screenHeight - (3 - floor(i/5))*(CARD_HEIGHT*1.1)
-            if (clickInCard(xstart, ystart)) {
+            if (clickInCard(xstart, ystart, x, y)) {
                 card = player.hand[i]
                 index = i
                 break
@@ -317,30 +402,44 @@ function onClick(x, y) {
             state.gold += card.worth
             removeAt(player.hand, index)
             if (!containsType(player.hand, TREASURE)) {
+                removeTouchKey(asciiCode('A'))
+                removeTouchKey(asciiCode('D'))
                 askForBuy()
+            } else {
+                askForGold()
             }
         } else if (inputState === WANT_ACTION && card !== NULLCARD 
             && card.type === ACTION) {
-            state.inPlay.push(card)
-            removeAt(player.hand, index)
-            state.actions--
-            applyProps(card)
-            card.effect()
+            playAction(player, card)
             if (state.actions <= 0 || !containsType(player.hand, ACTION)) {
+                removeTouchKey(asciiCode('N'))
                 askForGold()
+            } else {
+                askForAction()
             }
         }
     } else if (inputState === WANT_BUY) {
         var card = NULLCARD
         var player = playerList[state.turn]
         var index = 0
-        for (var i = 0; i < player.hand.length; ++i) {
+        for (var i = 0; i < cardsInPlay.length; ++i) {
             var xstart = (i%4)*(CARD_WIDTH*1.1)
-            var ystart = floor(i/4)*(CARD_HEIGHT*1.1),
-            if (clickInCard(xstart, ystart)) {
-                card = player.hand[i]
+            var ystart = floor(i/4)*(CARD_HEIGHT*1.1)
+            if (clickInCard(xstart, ystart, x, y)) {
+                card = cardsInPlay[i].card
                 index = i
                 break
+            }
+        }
+        if (card !== NULLCARD && card.cost <= state.gold) {
+            gainCard(player, card)
+            state.gold -= card.cost
+            state.buys--
+            if (state.buys <= 0) {
+                removeTouchKey(asciiCode('N'))
+                endTurn()
+            } else {
+                askForBuy()
             }
         }
     }
@@ -371,6 +470,11 @@ function onKeyStart(key) {
         if (key === asciiCode('N')) {
             removeTouchKey(asciiCode('N'))
             endTurn()
+        }
+    } else if (inputState === WANT_ACTION) {
+        if (key === asciiCode('N')) {
+            removeTouchKey(asciiCode('N'))
+            askForGold()
         }
     }
 }

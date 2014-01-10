@@ -21,10 +21,11 @@ function clearArray(array) {
     return array
 }
 
-Array.prototype.remove = function(i) {
-    if (i > -1) {
-        obj = this[i]
-        this.splice(i,1)
-        return obj
+Array.prototype.remove = function(obj) {
+    for (var i = 0; i < this.length; ++i) {
+        if (obj === this[i]) {
+            this.splice(i,1)
+            return
+        }
     }
 }
