@@ -16,11 +16,6 @@ function shuffle(array) {
     return array;
 }
 
-function clearArray(array) {
-    array = new Array()
-    return array
-}
-
 Array.prototype.remove = function(obj) {
     for (var i = 0; i < this.length; ++i) {
         if (obj === this[i]) {
