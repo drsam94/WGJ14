@@ -1,0 +1,10 @@
+{
+    "aiList" : [
+    { "name": "aiOne", "list" : [{ "card": "Province", "cap": -1 },
+                  { "card": "Gold",     "cap": -1 },
+                  { "card": "Laboratory", "cap": 5},
+                  { "card": "Money Lender", "cap": 1},
+                  { "card": "Silver",   "cap": 6},
+                  { "card": "Duchy",    "cap": -1}]}
+    ]
+}

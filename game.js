@@ -4,6 +4,7 @@
  */
 
 include('utils.js')
+include('utils2.js')
 include('cards.js')
 
 /** GUI Constants */
@@ -36,6 +37,9 @@ var WANT_INPLAY   = 5
 /** Will store a function for verifying choices are ok */
 var verifyFunc;
 var cardCallback;
+var selectedCards;
+var selectedCardsMax;
+var selectedCardsMin
 
 /** Statements to be printed out to the game log */
 var gameLog
@@ -95,7 +99,7 @@ function displayState() {
         fillText(gameLog[i], screenWidth* 3/4, screenHeight/2+30*i,'black', "bold 24px sans-serif")
     }
     drawTouchKeys()
-    fillText(cardToDisplay.text, screenWidth*3/4, screenHeight/2-30, 'black', "bold 30px sans-serf")
+    fillTextWordWrap(screenWidth*1/4, 35, cardToDisplay.text, screenWidth*3/4, screenHeight/2-200, 'black', "bold 30px sans-serf")
 }
 
 function logEvent(description) {
@@ -134,6 +138,7 @@ function gainCard(player, card) {
     return false
 }
 
+
 /** Returns a basic AI, that I will use for testing now */
 function AIOne() {
     return [ { card: PROVINCE, cap: Infinity },
@@ -145,13 +150,13 @@ function AIOne() {
 }
 /** Function for generating a player object using an index for the
     player*/
-function Player(i, isHuman) {
+function Player(i, isHuman, aiList) {
     return { number : i,
              deck   : startingDeck(),
              hand   : new Array(),
              discard: new Array(),
              human  : isHuman,
-             ai     : !isHuman ? AIOne() : 0 }
+             ai     : !isHuman ? aiList : 0 }
 }
 
 /** Returns the default starting deck */
@@ -223,10 +228,10 @@ function gameIsOver() {
 function askForGold() {
     if (containsType(playerList[state.turn].hand, TREASURE)) {
         gameMessage = "Choose Treasure cards to play"
-        displayState()
+        
         setTouchKeyRectangle(asciiCode('A'), 10,screenHeight/2, 140, 60, "All")
         setTouchKeyRectangle(asciiCode('D'), 10,screenHeight/2 + 100, 140, 60, "Done")
-        drawTouchKeys()
+        displayState()
         inputState = WANT_TREASURE
     } else {
         askForBuy()
@@ -235,33 +240,29 @@ function askForGold() {
 
 function askForBuy() {
     gameMessage = "Choose card to buy"
-    displayState()
     setTouchKeyRectangle(asciiCode('N'), 10,screenHeight/2, 140, 60, "None")
-    drawTouchKeys()
+    displayState()
     inputState = WANT_BUY
 }
 
 function askForAction() {
     gameMessage = "Choose an action to play"
-    displayState()
     setTouchKeyRectangle(asciiCode('N'), 10,screenHeight/2, 140, 60, "None")
-    drawTouchKeys()
+    displayState()
     inputState = WANT_ACTION
 }
 
+/** Need to figure out how to extend this well to Cellar, etc */
 function askForHand() {
     gameMessage = "Choose a card in your hand"
     displayState()
-    setTouchKeyRectangle(asciiCode('N'), 10,screenHeight/2, 140, 60, "None")
-    drawTouchKeys()
     inputState = WANT_HAND
 }
 
 function askForInPlay() {
     gameMessage = "Choose a card to gain"
-    displayState()
     setTouchKeyRectangle(asciiCode('N'), 10,screenHeight/2, 140, 60, "None")
-    drawTouchKeys()
+    displayState()
     inputState = WANT_INPLAY
 }
 
@@ -308,18 +309,30 @@ function askPlayerToGainCard(player, vFunc, callbackFunc) {
 
 /** Asks player for a card in their hand of the given chars
  *  AI will use aiFunc in order to decide on a card */
-function askPlayerForCard(player, vFunc, aiFunc, callbackFunc) {
+function askPlayerForCard(player, vFunc, aiFunc, callbackFunc, minCards, maxCards) {
+    selectedCards = []
     if (player.human) {
         verifyFunc = vFunc
         cardCallback = callbackFunc
+        selectedCardsMin = minCards
+        selectedCardsMax = maxCards
+        selectedCards    = []
+        removeTouchKey(asciiCode('N'))
+        if (selectedCardsMin === 0) {
+            setTouchKeyRectangle(asciiCode('D'), 10,screenHeight/2 + 100, 140, 60, "Done")
+        }
         askForHand()
     } else {
-        for (var i = 0; i < player.hand.length; ++i) {
+        for (var i = player.hand.length - 1; i >= 0; --i) {
             if (vFunc(player.hand[i]) && aiFunc(player.hand[i])) {
-                callbackFunc(player, player.hand[i])
-                break
+                selectedCards.push(player.hand[i])
+                removeAt(player.hand, i)
+                if (selectedCards.length === maxCards) {
+                    callbackFunc(player, selectedCards)
+                }
             }
         }
+        callbackFunc(player, selectedCards)
     }
 }
 
@@ -344,7 +357,7 @@ function takeTurn(player) {
                 logEvent("played " + card.name)
             }
         }
-        var priorityList = player.ai
+        var priorityList = player.ai.list
         while (state.buys > 0) {
             var boughtCard = false
             for (var i = 0; i < priorityList.length; ++i) {
@@ -433,10 +446,55 @@ function endTurn() {
     nextTurn()
 }
 
+/** Gets the list of all possible ais - will eventually need to be changed for setup
+  * dependence */
+function getAiList() {
+    var str = getRemoteFileAsString("ai.json")
+    var aiList = JSON.parse(str).aiList
+    return aiList
+}
+
+function serializeAI(ai) {
+    var str = '{ "name": '
+    str += '"' + ai.name + '", "list": [\n'
+    for (var i = 0; i < ai.list.length; ++i) {
+        str += '{ "card": "' + ai.list[i].name + '", "cap": '
+        str += ai.list[i].cap < INFINITY ? ai.list[i].cap : -1
+        str += "}" + (i === ai.list.lengt - 1 ?  "]}" : ",\n")
+    }
+    return str
+}
+
+/** Parses a JSON AI descrtiption into an actual AI opject, the only important
+  * this here is to convert string card names into actual cards */
+function parseAIDescription(aiDesc) {
+    var ret = new Object()
+    ret.name = aiDesc.name
+    ret.list = new Array()
+    for (var i = 0; i < aiDesc.list.length; ++i) {
+        ret.list.push({
+            card : getCardFromName(aiDesc.list[i].card),
+            cap  : aiDesc.list[i].cap < 0 ? Infinity : aiDesc.list[i].cap
+        })
+    }
+    return ret
+}
+
+/** Returns the card with the given name */
+function getCardFromName(name) {
+    for (var i = 0; i < ALLCARDS.length; ++i) {
+        if (ALLCARDS[i].name === name) {
+            return ALLCARDS[i]
+        }
+    }
+    return NULLCARD
+}
+
 function onSetup() {
     inputState = WANT_NONE
-    playerList = new Array (Player(0, true), Player(1, false))
-    initializePiles(ALLCARDS)
+    var AI = parseAIDescription(getAiList()[0])
+    playerList = [Player(0, true), Player(1, false, AI)]
+    initializePiles(ALLPILECARDS)
     gameLog = ["Game Begins"]
     for (var i = 0; i < playerList.length; ++i) {
         shuffle(playerList[i].deck)
@@ -462,11 +520,13 @@ function playAction(player, card) {
 }
 
 function endAction(player) {
-    if (state.actions <= 0 || !containsType(player.hand, ACTION)) {
-        removeTouchKey(asciiCode('N'))
-        askForGold()
-    } else {
-        askForAction()
+    if (player.human) {
+        if (state.actions <= 0 || !containsType(player.hand, ACTION)) {
+            removeTouchKey(asciiCode('N'))
+            askForGold()
+        } else {
+            askForAction()
+        }
     }
 }
 
@@ -505,9 +565,16 @@ function onClick(x, y) {
             }
         } else if (inputState === WANT_HAND && card !== NULLCARD
             && verifyFunc(card)) {
-            inputState = WANT_NONE
-            removeTouchKey(asciiCode('N'))
-            cardCallback(player, card)
+            selectedCards.push(card)
+            removeAt(player.hand, index)
+            if (selectedCards.length === selectedCardsMax) {
+                inputState = WANT_NONE
+                removeTouchKey(asciiCode('D'))
+                cardCallback(player, selectedCards)
+            } else if (selectedCards.length === selectedCardsMin) {
+                setTouchKeyRectangle(asciiCode('D'), 10,screenHeight/2 + 100, 140, 60, "Done")
+            }
+            displayState()
         }
     } else if (inputState === WANT_BUY || WANT_INPLAY) {
         for (var i = 0; i < cardsInPlay.length; ++i) {
@@ -572,8 +639,11 @@ function onKeyStart(key) {
             askForGold()
         }
     } else if (inputState === WANT_HAND || inputState === WANT_INPLAY) {
-        if (key === asciiCode('N')) {
-            removeTouchKey(asciiCode('N'))
+        if (key === asciiCode('D')) {
+            removeTouchKey(asciiCode('D'))
+            cardCallback(player, selectedCards)
+        } else if (key === asciiCode('N')) {
+            removeTouckKey(asciiCode('N'))
             cardCallback(player, NULLCARD)
         }
     }
@@ -598,8 +668,6 @@ function onMouseMove(x, y) {
             break
         }
     }
-    if (card !== NULLCARD) {
-        cardToDisplay = card
-        displayState()
-    }
+    cardToDisplay = card
+    displayState()
 }

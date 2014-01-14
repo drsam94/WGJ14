@@ -274,6 +274,29 @@ var GARDENS = {
     vp     : function(player) { return floor (player.deck.length / 10) }     
 }
 
+var CELLAR = {
+    name   : "Cellar",
+    text   : "+1 Action; Discard any number of cards. +1 Card per card discarded",
+    cost   : 2,
+    type   : ACTION,
+    subtype: NONE,
+    effect : function(player) {
+        askPlayerForCard(player,
+            function(card) { return true },
+            function(card) { return card === COPPER || card === ESTATE || card === CURSE },
+            function(p,c) {
+                for (var i = 0; i < c.length; ++i) {
+                    p.discard.push(c[i])
+                }
+                drawCards(p,c.length)
+                endAction(player)
+            }, 0, Infinity)
+    },
+    props  : { actions: 1,
+               cards:   0,
+               gold:    0,
+               buy:     0}
+}
 var MINE = {
     name   : "Mine",
     text   : "Trash a Treasure card from your hand. Gain a Treasure card costing up to $3 more; put it into your hand.",
@@ -281,30 +304,31 @@ var MINE = {
     type   : ACTION,
     subtype: NONE,
     effect : function(player) {
-        askPlayerForCard(player, 
-            function(card) { return card.type === TREASURE },
-            function(card) { return card !== GOLD },
-            function(p, c) {
-                if (c === NULLCARD) {
-                    return
-                } else {
-                    trash.push(c)
-                    player.hand.remove(c)
-                    askPlayerToGainCard(p, function(cc) {
-                        logEvent("chose " + cc.name) 
-                        return (cc.cost <= 3 + c.cost) && (cc.type === TREASURE)
-                    }, function(pp, cc) {
-                            logEvent("chose " + cc.name)
-                            if (countInPlay(cc) > 0) {
-                                pp.hand.push(cc)
-                                --cardsInPlay[pileIndex(cc)].count
-                            }
-                            if (player.human) {
-                                endAction()
-                            }
-                        })
-                }
-            })
+        if (containsType(player.hand), TREASURE) {
+            askPlayerForCard(player, 
+                function(card) { return card.type === TREASURE },
+                function(card) { return card !== GOLD },
+                function(p, c) {
+                    c = c[0]
+                    if (c === NULLCARD) {
+                        return
+                    } else {
+                        trash.push(c)
+                        player.hand.remove(c)
+                        askPlayerToGainCard(p, function(cc) {
+                            logEvent("chose " + cc.name) 
+                            return (cc.cost <= 3 + c.cost) && (cc.type === TREASURE)
+                        }, function(pp, cc) {
+                                logEvent("chose " + cc.name)
+                                if (countInPlay(cc) > 0) {
+                                    pp.hand.push(cc)
+                                    --cardsInPlay[pileIndex(cc)].count
+                                }
+                                endAction(player)
+                            })
+                    }
+                }, 1, 1)
+        }
     },
     props  : { actions: 0,
                cards:   0,
@@ -315,6 +339,10 @@ var NULLCARD = { name: "",
                  text: "",
                  type: NONE }
 
-var ALLCARDS =[VILLAGE, WOODCUTTER, SMITHY, MONEYLENDER, FESTIVAL,
-              LABORATORY, WITCH, MARKET, COUNCILROOM, ADVENTURER, 
-              GARDENS, MINE]
+var ALLPILECARDS =
+[VILLAGE, WOODCUTTER, SMITHY, MONEYLENDER, FESTIVAL,
+ LABORATORY, WITCH, MARKET, COUNCILROOM, ADVENTURER, 
+ GARDENS, MINE, CELLAR]
+
+var ALLCARDS = [ESTATE, DUCHY, PROVINCE, COPPER, SILVER, GOLD,
+                CURSE].concat(ALLPILECARDS)
