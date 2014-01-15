@@ -317,7 +317,7 @@ var MINE = {
                         player.hand.remove(c)
                         askPlayerToGainCard(p, function(cc) {
                             logEvent("chose " + cc.name) 
-                            return (cc.cost <= 3 + c.cost) && (cc.type === TREASURE)
+                            return (cc.cost == 3 + c.cost) && (cc.type === TREASURE)
                         }, function(pp, cc) {
                                 logEvent("chose " + cc.name)
                                 if (countInPlay(cc) > 0) {

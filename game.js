@@ -27,19 +27,28 @@ var state;
 
 /** For determining the meaning of input */
 var inputState
-var WANT_NONE     = 0 
-var WANT_TREASURE = 1
-var WANT_ACTION   = 2
-var WANT_BUY      = 3
-var WANT_HAND     = 4
-var WANT_INPLAY   = 5
+var WANT_NONE      = 0 
+var WANT_TREASURE  = 1
+var WANT_ACTION    = 2
+var WANT_BUY       = 3
+var WANT_HAND      = 4
+var WANT_INPLAY    = 5
+var PLAYER_SCREEN  = 6
+var AI_SCREEN      = 7
+var gameHasBegun   = false
+
+/** State input for beginning the game */
+var numHumanPlayers
+var numAIPlayers
+var AIDefinitions
+var aiPrototype
 
 /** Will store a function for verifying choices are ok */
 var verifyFunc;
 var cardCallback;
 var selectedCards;
 var selectedCardsMax;
-var selectedCardsMin
+var selectedCardsMin;
 
 /** Statements to be printed out to the game log */
 var gameLog
@@ -100,6 +109,43 @@ function displayState() {
     }
     drawTouchKeys()
     fillTextWordWrap(screenWidth*1/4, 35, cardToDisplay.text, screenWidth*3/4, screenHeight/2-200, 'black', "bold 30px sans-serf")
+}
+
+function displayPlayerScreen() {
+    fillRectangle(0,0,screenWidth,screenHeight,'white')
+    fillText("Human Players:", screenWidth * 1/4, screenHeight/2, 'black', "bold 40px sans-serif")
+    fillText(numHumanPlayers, screenWidth * 1/4, screenHeight/2+50, 'black', "bold 40px sans-serif")
+    fillText("AI Players:", screenWidth * 3/4, screenHeight/2, 'black', "bold 40px sans-serif")
+    fillText(numAIPlayers, screenWidth * 3/4, screenHeight/2+50, 'black', "bold 40px sans-serif")
+    fillTextWordWrap(screenWidth*1/2, 35, 
+    "Click or Press A/S to change number of human players, Z/X to change number of AI players, press any other key to start", 
+    screenWidth/2, screenHeight*3/4, 'black', "bold 40px sans-serif")
+    drawTouchKeys()
+}
+
+function displayAIScreen() {
+    fillRectangle(0,0,screenWidth,screenHeight,'white')
+    for (var i = 0; i < cardsInPlay.length; ++i) {
+        displayCard(cardsInPlay[i].card, (i%4)*(CARD_WIDTH*1.5),floor(i/4)*(CARD_HEIGHT*3), i)
+        fillText("cap: " + aiPrototype[i].cap, (i%4)*(CARD_WIDTH*1.5), (floor(i/4))*(CARD_HEIGHT)*3+CARD_HEIGHT*2, 'black', 'bold 24px sans-seif')
+        fillRectangle((i%4)*(CARD_WIDTH*1.5)+50, (floor(i/4))*(CARD_HEIGHT*3)-50+CARD_HEIGHT*2, 25,25, 'green')
+        fillText('+',(i%4)*(CARD_WIDTH*1.5)+50, (floor(i/4))*(CARD_HEIGHT*3)-25+CARD_HEIGHT*2, 25,25, 'blue','bold 40px sans-serif')
+        fillRectangle((i%4)*(CARD_WIDTH*1.5)+50, (floor(i/4))*(CARD_HEIGHT*3)+CARD_HEIGHT*2, 25,25,'red')
+        fillText('-',(i%4)*(CARD_WIDTH*1.5)+50, (floor(i/4))*(CARD_HEIGHT*3)+CARD_HEIGHT*2, 25,25, 'blue','bold 40px sans-serif')
+
+        fillText("pri: " + aiPrototype[i].priority, (i%4)*(CARD_WIDTH*1.5)+125, (floor(i/4))*(CARD_HEIGHT)*3+CARD_HEIGHT*2, 'black', 'bold 24px sans-seif')
+        fillRectangle((i%4)*(CARD_WIDTH*1.5)+175, (floor(i/4))*(CARD_HEIGHT*3)-50+CARD_HEIGHT*2, 25,25, 'green')
+        fillText('+',(i%4)*(CARD_WIDTH*1.5)+175, (floor(i/4))*(CARD_HEIGHT*3)-25+CARD_HEIGHT*2, 50,50, 'blue','bold 40px sans-serif')
+        fillRectangle((i%4)*(CARD_WIDTH*1.5)+175, (floor(i/4))*(CARD_HEIGHT*3)+CARD_HEIGHT*2, 25,25,'red')
+        fillText('-',(i%4)*(CARD_WIDTH*1.5)+175, (floor(i/4))*(CARD_HEIGHT*3)+CARD_HEIGHT*2, 50,50, 'blue','bold 40px sans-serif')
+    }
+
+    fillText("Or choose one of these default AIs:", screenWidth*3/4,screenHeight/2-50,'black','24px sans-serif')
+    for (var i = 0; i < AIDefinitions.length; ++i) {
+        fillRectangle(screenWidth*3/4, screenHeight/2+(i*50),50,50, 'grey')
+        fillText(AIDefinitions[i].name, screenWidth*3/4 + 50, screenHeight/2+(i*50),'black',"bold 30px sans-serif")
+    }
+    drawTouchKeys()
 }
 
 function logEvent(description) {
@@ -191,8 +237,8 @@ function drawCards(player, n) {
 /** Initializes the piles in the beginning of the game, given
   * a set of cards */
 function initializePiles(potentialCards) {
-    var numPlayers = playerList.length
-    var smallAmount= playerList.length < 3 ? 8 : 12
+    var numPlayers = numHumanPlayers + numAIPlayers
+    var smallAmount= numPlayers < 3 ? 8 : 12
     cardsInPlay    = new Array()
     cardsInPlay[0] = { card: COPPER, count: 60 - 7*numPlayers}
     cardsInPlay[1] = { card: SILVER, count: 40}
@@ -421,6 +467,7 @@ function nextTurn() {
     if (!gameIsOver()) {
         takeTurn(playerList[state.turn])
     } else {
+        gameHasBegun = false
         displayState()
         var points = new Array()
         for (var i = 0; i < playerList.length; ++i) {
@@ -451,7 +498,33 @@ function endTurn() {
 function getAiList() {
     var str = getRemoteFileAsString("ai.json")
     var aiList = JSON.parse(str).aiList
+    for (var i = 0; i < aiList.length; ++i) {
+        aiList[i] = parseAIDescription(aiList[i])
+    }
     return aiList
+}
+
+/** Takes an AI definition prototype and returns an AI definition */
+function convertPrototypeToDefinition(prototype) {
+    var ret = new Array()
+    for (var i = prototype.length - 1; i >= 0; --i) {
+        if (prototype[i].cap < 1) {
+            removeAt(prototype, i)
+        }
+    }
+    while (prototype.length > 0) {
+        var minPri = Infinity
+        var highEntry
+        for (var i = 0; i < prototype.length; ++i) {
+            if (prototype[i].priority < minPri) {
+                minPri = prototype[i].priority
+                highEntry = prototype[i]
+            }
+        }
+        ret.push({ card: highEntry.card, cap: highEntry.cap})
+        prototype.remove(highEntry)
+    }
+    return {name : "NewAI" + numAIPlayers, list: ret }
 }
 
 function serializeAI(ai) {
@@ -459,7 +532,7 @@ function serializeAI(ai) {
     str += '"' + ai.name + '", "list": [\n'
     for (var i = 0; i < ai.list.length; ++i) {
         str += '{ "card": "' + ai.list[i].name + '", "cap": '
-        str += ai.list[i].cap < INFINITY ? ai.list[i].cap : -1
+        str += ai.list[i].cap < Infinity ? ai.list[i].cap : -1
         str += "}" + (i === ai.list.lengt - 1 ?  "]}" : ",\n")
     }
     return str
@@ -490,11 +563,27 @@ function getCardFromName(name) {
     return NULLCARD
 }
 
+/** Sets things up and asks the player how many human/AI players there will be */
 function onSetup() {
+    inputState = PLAYER_SCREEN
+    numAIPlayers = 1
+    numHumanPlayers = 1
+    setTouchKeyRectangle(asciiCode('A'),screenWidth/4 + 50,screenHeight/2,50,50,"+")
+    setTouchKeyRectangle(asciiCode('S'),screenWidth/4 + 100,screenHeight/2,50,50,"-")
+    setTouchKeyRectangle(asciiCode('Z'),screenWidth*3/4 + 50,screenHeight/2,50,50,"+")
+    setTouchKeyRectangle(asciiCode('X'),screenWidth*3/4 + 100,screenHeight/2,50,50,"-")
+    displayPlayerScreen()
+}
+
+function beginGame() {
     inputState = WANT_NONE
-    var AI = parseAIDescription(getAiList()[0])
-    playerList = [Player(0, true), Player(1, false, AI)]
-    initializePiles(ALLPILECARDS)
+    for (var i = 0; i < numHumanPlayers; ++i) {
+        playerList.push(Player(0,true))
+    }
+    shuffle(playerList)
+    for (var i = 0; i < playerList.length; ++i) {
+        playerList[i].number = i
+    }
     gameLog = ["Game Begins"]
     for (var i = 0; i < playerList.length; ++i) {
         shuffle(playerList[i].deck)
@@ -502,7 +591,50 @@ function onSetup() {
     }
     state = {turn : -1}
     trash = new Array()
+    gameHasBegun = true
     nextTurn()
+}
+
+function getNextAIPlayer() {
+    inputState = AI_SCREEN
+    AIDefinitions = getAiList()
+    aiPrototype = new Array()
+    for (var i = 0; i < cardsInPlay.length; ++i) {
+        var card = cardsInPlay[i].card
+        var entry = new Object()
+        if (card === PROVINCE) {
+            entry.priority = -1
+            entry.cap = 20
+        } else {
+            entry.priority = 0
+            entry.cap = 0
+        }
+        entry.card = card
+        aiPrototype.push(entry)
+    }
+    if (playerList.length === 0) {
+        setTouchKeyRectangle(asciiCode('D'), 50, screenHeight*4/5, 100, 50, "Done")
+    }
+    displayAIScreen()
+}
+
+/** called after the player has determined how many people are playing */
+function doneWithPlayerScreen() {
+    removeTouchKey(asciiCode('A'))
+    removeTouchKey(asciiCode('S'))
+    removeTouchKey(asciiCode('Z'))
+    removeTouchKey(asciiCode('X'))
+
+    initializePiles(ALLPILECARDS)
+    playerList = new Array()
+    if (numAIPlayers + numHumanPlayers < 2) {
+        alert("Are you stupid? You need at least 2 people to play a game")
+        onSetup()
+    } else if (numAIPlayers > 0) {
+        getNextAIPlayer()
+    } else {
+        beginGame()
+    }
 }
 
 function clickInCard(xstart, ystart, x, y) {
@@ -531,10 +663,56 @@ function endAction(player) {
 }
 
 function onClick(x, y) {
-    var card = NULLCARD
-    var player = playerList[state.turn]
-    var index = 0
-    if (inputState === WANT_TREASURE || inputState === WANT_ACTION || inputState === WANT_HAND) {
+    if (inputState === AI_SCREEN) {
+        for (var i = 0; i < cardsInPlay.length; ++i) {
+            var size  = 25
+            var capX  = (i%4)*(CARD_WIDTH*1.5)+50
+            var plusY = (floor(i/4))*(CARD_HEIGHT*3)-50+CARD_HEIGHT*2
+            var minY  = (floor(i/4))*(CARD_HEIGHT*3)+CARD_HEIGHT*2
+            var priX  = (i%4)*(CARD_WIDTH*1.5)+175
+
+            if (x >= capX  && x <= capX + size &&
+                y >= plusY && y <= plusY + size) {
+                aiPrototype[i].cap++
+                displayAIScreen()
+            } else if (x >= capX  && x <= capX + size &&
+                y >= minY && y <= minY + size) {
+                aiPrototype[i].cap--
+                displayAIScreen()
+            } else if (x >= priX  && x <= priX + size &&
+                y >= plusY && y <= plusY + size) {
+                aiPrototype[i].priority++
+                displayAIScreen()
+            } else if (x >= priX  && x <= priX + size &&
+                y >= minY && y <= minY + size) {
+                aiPrototype[i].priority--
+                displayAIScreen()
+            }
+        }
+
+        for (var i = 0; i < AIDefinitions.length; ++i) {
+            var startX = screenWidth*3/4
+            var startY = screenHeight/2+(i*50)
+            var size   = 50
+
+            if (x >= startX && x <= startX + 50 &&
+                y >= startY && y <= startY + 50) {
+                var aiDef = AIDefinitions[i]
+                playerList.push(Player(0, false, aiDef))
+                if (playerList.length === numAIPlayers) {
+                    removeTouchKey(asciiCode('D'))
+                    beginGame() 
+                } else {
+                    getNextAIPlayer()
+                }
+            }
+        }
+    }
+
+    else if (inputState === WANT_TREASURE || inputState === WANT_ACTION || inputState === WANT_HAND) {
+        var card = NULLCARD
+        var player = playerList[state.turn]
+        var index = 0
         for (var i = 0; i < player.hand.length; ++i) {
             var xstart = (i%5)*CARD_WIDTH*1.1
             var ystart = screenHeight - (3 - floor(i/5))*(CARD_HEIGHT*1.1)
@@ -576,7 +754,10 @@ function onClick(x, y) {
             }
             displayState()
         }
-    } else if (inputState === WANT_BUY || WANT_INPLAY) {
+    } else if (inputState === WANT_BUY || inputState === WANT_INPLAY) {
+        var card = NULLCARD
+        var player = playerList[state.turn]
+        var index = 0
         for (var i = 0; i < cardsInPlay.length; ++i) {
             var xstart = (i%4)*(CARD_WIDTH*1.1)
             var ystart = floor(i/4)*(CARD_HEIGHT*1.1)
@@ -608,8 +789,36 @@ function onClick(x, y) {
 }
 
 function onKeyStart(key) {
-    var player = playerList[state.turn]
-    if (inputState === WANT_TREASURE) {
+    if (inputState === AI_SCREEN) {
+        if (key === asciiCode('D')) {
+            var aiDef = convertPrototypeToDefinition(aiPrototype)
+            AIDefinitions.push(aiDef)
+            playerList.push(Player(0, false, aiDef))
+            if (playerList.length === numAIPlayers) {
+                removeTouchKey(asciiCode('D'))
+                beginGame() 
+            } else {
+                getNextAIPlayer()
+            }
+        }
+    } else if (inputState === PLAYER_SCREEN) {
+        if (key === asciiCode('A')) {
+            numHumanPlayers++
+            displayPlayerScreen()
+        } else if (key === asciiCode('S')) {
+            numHumanPlayers--
+            displayPlayerScreen()
+        } else if (key === asciiCode('Z')) {
+            numAIPlayers++
+            displayPlayerScreen()
+        } else if (key === asciiCode('X')) {
+            numAIPlayers--
+            displayPlayerScreen()
+        } else {
+            doneWithPlayerScreen()
+        }
+    } else if (inputState === WANT_TREASURE) {
+        var player = playerList[state.turn]
         if (key === asciiCode('A')) {
             for (var i = player.hand.length - 1; i >= 0; --i) {
                 if (player.hand[i].type === TREASURE) {
@@ -639,6 +848,7 @@ function onKeyStart(key) {
             askForGold()
         }
     } else if (inputState === WANT_HAND || inputState === WANT_INPLAY) {
+        var player = playerList[state.turn]
         if (key === asciiCode('D')) {
             removeTouchKey(asciiCode('D'))
             cardCallback(player, selectedCards)
@@ -650,24 +860,26 @@ function onKeyStart(key) {
 }
 
 function onMouseMove(x, y) {
-    var card = NULLCARD
-    var player = playerList[state.turn]
-    for (var i = 0; i < player.hand.length; ++i) {
-        var xstart = (i%5)*CARD_WIDTH*1.1
-        var ystart = screenHeight - (3 - floor(i/5))*(CARD_HEIGHT*1.1)
-        if (clickInCard(xstart, ystart, x, y)) {
-            card = player.hand[i]
-            break
+    if (gameHasBegun) {
+        var card = NULLCARD
+        var player = playerList[state.turn]
+        for (var i = 0; i < player.hand.length; ++i) {
+            var xstart = (i%5)*CARD_WIDTH*1.1
+            var ystart = screenHeight - (3 - floor(i/5))*(CARD_HEIGHT*1.1)
+            if (clickInCard(xstart, ystart, x, y)) {
+                card = player.hand[i]
+                break
+            }
         }
-    }
-    for (var i = 0; i < cardsInPlay.length; ++i) {
-        var xstart = (i%4)*(CARD_WIDTH*1.1)
-        var ystart = floor(i/4)*(CARD_HEIGHT*1.1)
-        if (clickInCard(xstart, ystart, x, y)) {
-            card = cardsInPlay[i].card
-            break
+        for (var i = 0; i < cardsInPlay.length; ++i) {
+            var xstart = (i%4)*(CARD_WIDTH*1.1)
+            var ystart = floor(i/4)*(CARD_HEIGHT*1.1)
+            if (clickInCard(xstart, ystart, x, y)) {
+                card = cardsInPlay[i].card
+                break
+            }
         }
+        cardToDisplay = card
+        displayState()
     }
-    cardToDisplay = card
-    displayState()
 }
