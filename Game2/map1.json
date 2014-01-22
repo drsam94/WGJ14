@@ -1,0 +1,5 @@
+{
+"terrain" : "map1.map",
+"allies"  : [ {"x" : 0, "y" : 0}],
+"enemies" : [ { "name" : "Ike"   , "class" : "Assassin", "level" : 6, "weapons" : [ "Iron Sword" ], "x" : 3, "y" : 3, "army" : "enemy"}]
+}
