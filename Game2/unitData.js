@@ -19,16 +19,16 @@ var classData = {
             Movement: 6
         },
         growth : {
-            HP      : .9,
-            Strength  : .4,
-            Magic   : .1,
-            Defense : .3,
-            Skill   : .6,
-            Speed   : .6,
-            Luck    : .5,
-            Resistance : .2,
-            Build   : .0,
-            Moevement : .0
+            HP      : 90,
+            Strength  : 40,
+            Magic   : 10,
+            Defense : 30,
+            Skill   : 60,
+            Speed   : 60,
+            Luck    : 50,
+            Resistance : 20,
+            Build   : 0,
+            Movement : 0
         },
 
         weapons : {
@@ -48,23 +48,77 @@ var characterData = {
             Magic   : 0,
             Defense : 2,
             Skill   : 5,
-            Speed   : 55,
+            Speed   : 5,
             Luck    : 7,
             Resistance : 5,
             Build   : 7,
             Movement: 0
         },
         growth : {
-            HP      : .4,
-            Strength  : .2,
-            Magic   : .0,
-            Defense : .1,
-            Skill   : .2,
-            Speed   : .2,
-            Luck    : .3,
-            Resistance : .0,
-            Build   : .0,
-            Moevement : .05
+            HP      : 40,
+            Strength  : 20,
+            Magic   : 0,
+            Defense : 10,
+            Skill   : 20,
+            Speed   : 20,
+            Luck    : 30,
+            Resistance : 0,
+            Build   : 0,
+            Movement : 0
+        },
+    },
+
+    Marth : {
+        base : {
+            HP      : 20,
+            Strength  : 3,
+            Magic   : 0,
+            Defense : 2,
+            Skill   : 5,
+            Speed   : 5,
+            Luck    : 7,
+            Resistance : 5,
+            Build   : 7,
+            Movement: 0
+        },
+        growth : {
+            HP      : 40,
+            Strength  : 20,
+            Magic   : 0,
+            Defense : 10,
+            Skill   : 20,
+            Speed   : 20,
+            Luck    : 30,
+            Resistance : 0,
+            Build   : 0,
+            Movement : 0
+        },
+    },
+
+    Eliwood : {
+        base : {
+            HP      : 20,
+            Strength  : 3,
+            Magic   : 0,
+            Defense : 2,
+            Skill   : 5,
+            Speed   : 5,
+            Luck    : 7,
+            Resistance : 5,
+            Build   : 7,
+            Movement: 0
+        },
+        growth : {
+            HP      : 40,
+            Strength  : 20,
+            Magic   : 0,
+            Defense : 10,
+            Skill   : 20,
+            Speed   : 20,
+            Luck    : 30,
+            Resistance : 0,
+            Build   : 0,
+            Movement : 0
         },
     }
 }
@@ -83,7 +137,7 @@ var weaponData = {
 }
 
 var terrainData = {
-    "Plain"   : { Def : 0, Avoid : 0},
-    "Forest"  : { Def : 1, Avoid : 20},
-    "Mountain": { Def : 3, Avoid : 40}
+    "Plain"   : { Def : 0, Avoid : 0, cost: 1},
+    "Forest"  : { Def : 1, Avoid : 20, cost: 2},
+    "Mountain": { Def : 3, Avoid : 40, cost: 4}
 }
