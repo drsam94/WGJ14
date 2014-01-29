@@ -18,6 +18,7 @@ var DOWN_ARROW  = 40
 var A_KEY       = asciiCode('Z')
 var B_KEY       = asciiCode('X')
 var X_KEY       = asciiCode('A')
+var Y_KEY       = asciiCode('S')
 
 var NORTH = 0
 var EAST  = 1
@@ -27,6 +28,7 @@ var WEST  = 3
 var SCREEN_TILES_X = 12
 var SCREEN_TILES_Y = 12
 var TILE_DIMENSION = 16
+var ATTACK_TICKER_AMOUNT = 20
 
 var cursorOffscreenX
 var cursorOffscreenY
@@ -34,10 +36,17 @@ var cursorOffscreenY
 var NOUNIT = 0
 var PLAYER = 1
 var ENEMY  = 2
-var onLevel
 var currentTurn
 var cursor
 var currentMap
+
+/**Gives grand game state, 
+ *will eventually include options like unit select*/
+var ON_LEVEL = 0
+var LOST     = 1
+var WON      = 2
+var START_SCREEN = 3
+var gameState
 
 var allUnits
 var alliedUnits
@@ -47,6 +56,9 @@ var unitInspection
 var endMoveMenu
 var attackSquareSelect
 var optionsMenu
+var animateAttack
+var openingBanner
+var enemyWait
 
 function getDirFromKey(key) {
     return (key - 34) % 4
@@ -68,6 +80,18 @@ function toRealY(y) {
     return (y - cursorOffscreenY) * tileHeight()
 }
 
+function drawStartScreen() {
+    fillRectangle(0, 0, screenWidth, screenHeight, 'black')
+    fillTextWordWrap(screenWidth*3/4, tileHeight()*3/4, 
+        'Many years ago, there was something very evil. It was going to destroy the world, but then some cool dudes stopped it. ' +
+        'Of course, there were not able to entirely defeat it, they only sealed it away for a very long time. Unfortunately, ' +
+        'a very long time has passed, and now some more evil dudes are trying to bring that evil thing back. You are the prince ' +
+        'of some nation, and the descendant of one of those people who stopped the evil thing the last time, so now you must fight ' +
+        'some people and probably also acquire an object called the Fire Emblem in order to seal that super evil thing again and ' + 
+        'save the world. By the way, Z selects units / menu options, etc. X cancels options, and A brings up unit details. Now go ' +
+        'play this game that is more engine than game. Press any key to start.',
+        screenWidth/8, screenHeight/8, 'white', '60px bold sans-serif', 'left', 'hanging')
+}
 /** Draws all of the tiles for the map, this is called every frame */
 function drawMap() {
     //find offset to where drawing must start
@@ -100,7 +124,16 @@ function drawOptionsMenu() {
 
 function drawUnitInspection() {
     if (unitInspection.on) {
-        var posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 3)
+        var posX
+        var posItemsX
+        if (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2) {
+            posX = 0
+            posItemsX = tileWidth()*2 + tileWidth()/8
+        } else {
+            posX = (SCREEN_TILES_X-2) * tileWidth()
+            posItemsX = (SCREEN_TILES_X-3.5)*tileWidth() - tileWidth()/8
+        }
+        //ar posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 3)
         fillRectangle(posX,0,tileWidth()*2,tileHeight()*7,'grey')
         var i = 1
         for (stat in STATS) {
@@ -114,12 +147,20 @@ function drawUnitInspection() {
             }
             fillText(str, posX,i++*tileHeight()/2,'black','40px bold sans-serif')
         }
+        fillRectangle(posItemsX,0,tileWidth()*1.5, tileHeight()*4,'grey')
+        var weapons = unitInspection.unit.weapons
+        for (i = 0; i < weapons.length; ++i) {
+            fillText(weapons[i].weapon, posItemsX, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'left','hanging')
+            fillText(weapons[i].uses+"", posItemsX+tileWidth()*1.5, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'right', 'hanging')
+        }
     }
 }
 
 function drawUnitDetail() {
     var unit
-    if ((endMoveMenu.on || optionsMenu.on || attackSquareSelect.on || unitInspection.on)) {
+    if ((endMoveMenu.on || optionsMenu.on || 
+         attackSquareSelect.on || unitInspection.on
+         || animateAttack.on)) {
         return 
     } 
     if (!moveDetails.moving) {
@@ -152,21 +193,55 @@ function fillTripleText(field, desc, posX, i, ally, enemy) {
     fillText(enemy[field], posX+tileWidth()*2, tileHeight()+tileHeight()*(i/2), 'black', '40px bold sans-serif', 'left', 'hanging')
 }
 function drawCombatDetail() {
+    var enemy = 0
+    var ally
     if (attackSquareSelect.on) {
-        var enemy = attackSquareSelect.options[attackSquareSelect.selected].unit
-        var ally  = moveDetails.unit
+        ally = moveDetails.unit
+        enemy = attackSquareSelect.options[attackSquareSelect.selected].unit
+    } else if (animateAttack.on) {
+        ally = animateAttack.attacker
+        enemy  = animateAttack.defender
+    }
+    if (enemy !== 0) {
         var atkData = getAttackData(ally, enemy)
         var defData = getAttackData(enemy, ally)
         var posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 3)
-        fillRectangle(posX, tileHeight(), tileWidth(), tileHeight()*3,'blue')
+        fillRectangle(posX, tileHeight(), tileWidth(), tileHeight()*3, ally.army === "ally" ? 'blue' : 'red')
         fillRectangle(posX+tileWidth(), tileHeight(), tileWidth(), tileHeight()*3,'grey')
-        fillRectangle(posX+tileWidth()*2, tileHeight(), tileWidth(), tileHeight()*3,'red')
+        fillRectangle(posX+tileWidth()*2, tileHeight(), tileWidth(), tileHeight()*3, enemy.army === "ally" ? 'blue' : 'red')
         fillTripleText("name", "Name", posX, 0, ally, enemy)
         fillTripleText("currentHP", "HP", posX, 1, ally, enemy)
         fillTripleText("Might", "Mt", posX, 2, atkData, defData)
         fillTripleText("numAttacks", "x", posX, 3, atkData, defData)
         fillTripleText("Accuracy", "Hit", posX, 4, atkData, defData)
         fillTripleText("Crit", "Crit", posX, 5, atkData, defData)
+    }
+    if (attackSquareSelect.on) {
+        fillRectangle(posX+tileWidth()/2, tileHeight()*4, tileWidth()*2, tileHeight()/2, 'grey')
+        fillText("<A " + ally.weapons[0].weapon + " S>", posX + tileWidth()/2, tileHeight()*4, 'black', '40px bold sans-serif', 'left', 'hanging')
+    }
+}
+
+function drawHPBar(unit, posX, posY) {
+    fillRectangle(posX, posY, 2 * tileWidth(), .5 * tileHeight(), unit.army === 'ally' ? 'blue' : 'red')
+    fillText(unit.currentHP, posX, posY, 'black', '40px bold sans-serif', 'left', 'hanging')
+    fillRectangle(posX+tileWidth()*.5, posY, 1.5 * tileWidth() * unit.HP / 80, .5*tileHeight(), 'grey')
+    fillRectangle(posX+tileWidth()*.5, posY, 1.5 * tileWidth() * unit.currentHP / 80, .5*tileHeight(), 'yellow')
+}
+
+function drawMidCombatDetail() {
+    if (animateAttack.on) {
+        var posY = tileWidth() * animateAttack.attacker.y + 
+        3 * (animateAttack.attacker.y - cursorOffscreenY > SCREEN_TILES_Y / 2 ? -1 : 1)
+        if (animateAttack.attacker.x <= animateAttack.defender.x) {
+            var posX = min(animateAttack.attacker.x - cursorOffscreenX, SCREEN_TILES_X - 4)
+            drawHPBar(animateAttack.attacker, posX, posY)
+            drawHPBar(animateAttack.defender,posX + 2*tileWidth(), posY)
+        } else {
+            var posX = min(animateAttack.defender.x - cursorOffscreenX, SCREEN_TILES_X - 4)
+            drawHPBar(animateAttack.defender, posX, posY)
+            drawHPBar(animateAttack.attacker,posX + 2*tileWidth(), posY)
+        }
     }
 }
 
@@ -212,9 +287,9 @@ function drawEndMoveMenu() {
     }
 }
 
-function drawUnits() {
-    for (var i = 0; i < alliedUnits.length; ++i) {
-        var unit = alliedUnits[i]
+function drawArmy(army) {
+    for (var i = 0; i < army.length; ++i) {
+        var unit = army[i]
         drawImage(classNameToSpriteSheet[unit.class][unit.army],
                   toRealX(unit.x), toRealY(unit.y),
                   tileWidth(), tileHeight(),
@@ -225,13 +300,31 @@ function drawUnits() {
                           makeColor(0,0,0,.7))
         }
     }
-    for (var i = 0; i < enemyUnits.length; ++i) {
-        var unit = enemyUnits[i]
-        drawImage(classNameToSpriteSheet[unit.class][unit.army],
-                  toRealX(unit.x), toRealY(unit.y),
-                  tileWidth(), tileHeight(),
-                  5 + 20*(floor(currentTime()*3) % 3),30, TILE_DIMENSION, TILE_DIMENSION) 
+}
+
+function drawUnits() {
+    drawArmy(alliedUnits)
+    drawArmy(enemyUnits)
+}
+
+function drawOpeningBanner() {
+    if (openingBanner.on) {
+        fillRectangle(screenWidth/2 - tileWidth(), screenHeight/2 - tileHeight(), 
+            tileWidth() * 2, tileHeight(), currentTurn === PLAYER ? 'blue' : 'red')
+        fillText((currentTurn === PLAYER ? "Player" : "Enemy") + "Turn",
+            screenWidth/2 - tileWidth(), screenHeight/2 - tileHeight(),
+            'black', '50px bold sans-serif', 'left', 'hanging')
     }
+}
+
+function drawLoseScreen() {
+    fillRectangle(0,0,screenWidth, screenHeight, 'red')
+    fillText("Jaffar died. You lose.", screenWidth/2, screenHeight/2, 'white', '60px bold sans-serif')
+}
+
+function drawWinScreen() {
+    fillRectangle(0,0,screenWidth, screenHeight, 'black')
+    fillText("You killed the enemy. You win!", screenWidth/2, screenHeight/2, 'white', '60px bold sans-serif')
 }
 
 function computeValidMoveSquares() {
@@ -289,8 +382,8 @@ function computeValidMoveSquares() {
 
 function getAttackData(attacker, defender) {
     var attackerData = new Object()
-    var attackWeapon = weaponData[attacker.weapons[0]]
-    var defendWeapon = weaponData[defender.weapons[0]]
+    var attackWeapon = weaponData[attacker.weapons[0].weapon]
+    var defendWeapon = weaponData[defender.weapons[0].weapon]
     if (attackWeapon.DamageType === "Physical") {
         attackerData.Might = attacker.Strength + attackWeapon.Might * 1 - 
                              defender.Defense
@@ -317,22 +410,20 @@ function percentChance(percent) {
     return (randomReal(0,100) < percent)
 }
 
+function hitChance(percent) {
+    return (randomReal(0,100) + randomReal(0,100)) / 2 < percent
+}
+
 /** Applies an attack, then returns if lethal */
 function applyAttackData(attacker, defender, attackerData, defenderData) {
     attackerData.numAttacks--
-    if (percentChance(attackerData.Accuracy)) {
+    if (hitChance(attackerData.Accuracy)) {
         if (percentChance(attackerData.Crit)) {
             attackerData.Might *= 3
         }
-        defender.currentHP -= attackerData.Might
-        defender.currentHP = max(defender.currentHP, 0)
+        animateAttack.damageToDeal = attackerData.Might
+        attacker.weapons[0].uses--
     }
-    if (defender.currentHP <= 0) {
-        allUnits[defender.army].remove(defender)
-        currentMap.tile[defender.x][defender.y].unit = NOUNIT
-        return true
-    }
-    return false
 }
 
 function applyExperience(gainer, other, otherStartHP) {
@@ -346,31 +437,88 @@ function applyExperience(gainer, other, otherStartHP) {
     }
 }
 
-function performAttack(attacker, defender) {
-    var beginAttackHP = attacker.currentHP
-    var beginDefHP    = defender.currentHP
-    var attackerData = getAttackData(attacker, defender)
-    var defenderData = getAttackData(defender, attacker)
-    while (attackerData.numAttacks + defenderData.numAttacks > 0) {
-        //check for death within here, yo
-        if (attackerData.numAttacks > 0 && attacker.currentHP > 0) {
-            if(applyAttackData(attacker, defender, attackerData, defenderData)) {
-                break
-            }
-        }
-        if (defenderData.numAttacks > 0 && defender.currentHP > 0) {
-            if (applyAttackData(defender, attacker, defenderData, attackerData)) {
-                break
-            }
-        }
-    }
-    if (attacker.army === "ally") {
-        applyExperience(attacker, defender, beginDefHP)
-    } else if (defender.army === "ally") {
-        applyExperience(defender, attacker, beginAttackHP)
-    }
-    attacker.active = false
+function performAttack(attacker, defender, nextIndex) {
     attackSquareSelect.on = false
+    animateAttack = { on: true,
+    beginAttackHP : attacker.currentHP,
+    beginDefHP    : defender.currentHP,
+    attackerData : getAttackData(attacker, defender),
+    defenderData : getAttackData(defender, attacker),
+    attacker     : attacker,
+    defender     : defender,
+    turn         : 0,
+    ticker       : ATTACK_TICKER_AMOUNT,
+    nextIndex    : nextIndex,
+    damageToDeal : 0,
+    endNextTick  : false }
+}
+
+function checkAndHandleDeath(unit) {
+    if (unit.currentHP <= 0) {
+        if (unit.name === "Jaffar") {
+            gameState = LOST
+            return
+        }
+        allUnits[unit.army].remove(unit)
+        currentMap.tile[unit.x][unit.y].unit = NOUNIT
+        animateAttack.damageToDeal = 0
+        animateAttack.nextIndex--
+        animateAttack.endNextTick = true
+        animateAttack.ticker = ATTACK_TICKER_AMOUNT
+        if (enemyUnits.length === 0) {
+            gameState = WON
+        }
+    }
+}
+
+function animateDamage(unit) {
+    --unit.currentHP
+    --animateAttack.damageToDeal
+    --animateAttack.ticker
+}
+
+function slowApplyAttack() {
+    if (!animateAttack.on) { return }
+    if (animateAttack.damageToDeal > 0) {
+        var unit = animateAttack.turn === 0 ? animateAttack.defender : animateAttack.attacker
+        animateDamage(unit)
+        checkAndHandleDeath(unit)
+    } else if (animateAttack.endNextTick) {
+        if (--animateAttack.ticker <= 0) {
+            endAttack()
+        }
+    } else if (animateAttack.attackerData.numAttacks + animateAttack.defenderData.numAttacks > 0) {
+        if (--animateAttack.ticker <= 0) {
+            if (animateAttack.turn === 0 && animateAttack.attackerData.numAttacks > 0) {
+                applyAttackData(animateAttack.attacker, animateAttack.defender,
+                                    animateAttack.attackerData, animateAttack.defenderData)
+                animateAttack.ticker = ATTACK_TICKER_AMOUNT
+            } else if (animateAttack.turn === 1 && animateAttack.defenderData.numAttacks > 0) {
+                applyAttackData(animateAttack.defender, animateAttack.attacker,
+                                animateAttack.defenderData, animateAttack.attackerData)
+                animateAttack.ticker = ATTACK_TICKER_AMOUNT
+            } else {
+                animateAttack.turn += 1
+                animateAttack.turn %= 2
+            }
+        } 
+    } else {
+        animateAttack.endNextTick = true
+        animateAttack.ticker = ATTACK_TICKER_AMOUNT
+    }
+}
+
+function endAttack() {
+    if (animateAttack.attacker.army === "ally") {
+        applyExperience(animateAttack.attacker, animateAttack.defender, animateAttack.beginDefHP)
+    } else if (animateAttack.defender.army === "ally") {
+        applyExperience(animateAttack.defender, animateAttack.attacker, animateAttack.beginAttackHP)
+    }
+    animateAttack.attacker.active = false
+    animateAttack.on = false
+    if (animateAttack.nextIndex >= 0) {
+        doEnemyTurn(animateAttack.nextIndex)
+    }
 }
 
 
@@ -385,7 +533,7 @@ function performMenuSelection(menu) {
         var unit = attackSquareSelect.options[attackSquareSelect.selected].unit
         moveCursorTo(unit.x, unit.y)
     } else if (selection === "End") {
-        currentTurn = ENEMY
+        beginEnemyTurn()
     }
     menu.on = false
 }
@@ -468,6 +616,10 @@ function loadMap(mapFileName, imageFileName) {
         ret.tile[unit.x][unit.y].unit = unit
         unit.currentHP = unit.HP
         unit.Exp = 0
+        unit.weaponLevel = classData[unit.class].weaponLevel
+        for (var w = 0; w  < unit.weapons.length; ++w) {
+            unit.weapons[w] = {weapon: unit.weapons[w], uses: weaponData[unit.weapons[w]].Uses}
+        }
     }
     ret.width  = maxX
     ret.height = maxY + 1
@@ -576,8 +728,17 @@ function handleMenuKey(key, menu, cancelFunc) {
     }
 }
 
+function canWieldWeapon(unit, weapon) {
+    var wStats = weaponData[weapon]
+    return wStats.Level <= unit.weaponLevel[wStats.Type]
+}
+
 function onKeyStart(key) {
-    if (onLevel && currentTurn === PLAYER) {
+    if (gameState === START_SCREEN) {
+        gameState = ON_LEVEL
+    } else if (gameState !== ON_LEVEL) {
+        onSetup()
+    } else if (gameState === ON_LEVEL && currentTurn === PLAYER && !openingBanner.on && !animateAttack.on) {
         if (unitInspection.on) {
             if (key === B_KEY) {
                 unitInspection.on = false
@@ -602,8 +763,36 @@ function onKeyStart(key) {
             } else if (key === B_KEY) {
                 endMoveMenu.on = true
                 attackSquareSelect.on = false
+                cursor.x = moveDetails.unit.x
+                cursor.y = moveDetails.unit.y
             } else if (key === A_KEY) {
-                performAttack(endMoveMenu.unit, attackSquareSelect.options[attackSquareSelect.selected].unit)
+                performAttack(endMoveMenu.unit, attackSquareSelect.options[attackSquareSelect.selected].unit, -1)
+            } else if (key === X_KEY) {
+                do {
+                    if (moveDetails.unit.weapons.length > 1) {
+                        var weapons = moveDetails.unit.weapons
+                        var newWeapons = new Array()
+                        newWeapons.push(weapons[weapons.length-1])
+                        for (var i = 0; i < weapons.length-1; ++i) {
+                            newWeapons.push(weapons[i])
+                        }
+                        moveDetails.unit.weapons = newWeapons
+                    }
+                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0].weapon))
+
+            } else if (key === Y_KEY) {
+                do {
+                    if (moveDetails.unit.weapons.length > 1) {
+                        var weapons = moveDetails.unit.weapons
+                        var newWeapons = new Array()
+                        newWeapons.push(weapons[1])
+                        for (var i = 2; i < weapons.length; ++i) {
+                            newWeapons.push(weapons[i])
+                        }
+                        newWeapons.push(weapons[0])
+                        moveDetails.unit.weapons = newWeapons
+                    }
+                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0].weapon))
             }
         } else {
             if (isArrow(key)) {
@@ -670,9 +859,17 @@ function setUpAllies() {
 }
 
 function beginPlayerTurn() {
+    openingBanner = {on: true, ticker: 30, callback: function() {}}
     alliedUnits.forEach(function(x) {x.active = true})
+    enemyUnits.forEach(function(x) {x.active = true})
     currentTurn = PLAYER
     moveDetails = { moving: false, validSquares: []}
+    for (var i = 0; i < alliedUnits.length; ++i) {
+        if (alliedUnits[i].name === "Jaffar") {
+            moveCursorTo(alliedUnits[i].x, alliedUnits[i].y)
+            break
+        }
+    }
 }
 
 function noActiveAllies() {
@@ -689,9 +886,30 @@ function strengthMetric(unit) {
 }
 
 function beginEnemyTurn() {
-    enemyUnits.forEach(function(x) { x.active = true})
-    alliedUnits.sortBasedOnMetric(strengthMetric)
-    for (var e = 0; e < enemyUnits.length; ++e) {
+    currentTurn = ENEMY
+    alliedUnits.forEach(function(x) {x.active = true})
+    enemyUnits.forEach(function(x) {x.active = true})
+    openingBanner = {on: true, ticker: 30, callback : function() {doEnemyTurn(0)}}
+}
+
+function handleEnemyWait() {
+    if (enemyWait.on) {
+        if (--enemyWait.ticker <= 0) {
+            enemyWait.on = false
+            doEnemyTurn(enemyWait.nextIndex)
+        }
+    }
+}
+
+function doEnemyTurn(startIndex) {
+    if (startIndex === 0) {
+        enemyUnits.forEach(function(x) { x.active = true})
+        alliedUnits.sortBasedOnMetric(strengthMetric)
+    } else {
+        enemyUnits[startIndex-1].active = false
+    }
+    var e = startIndex
+    if (e < enemyUnits.length) {
         var unit = enemyUnits[e]
         moveDetails = { moving: true, validSquares: [], unit: unit, loc: {x: unit.x, y: unit.y}}
         computeValidMoveSquares()
@@ -703,37 +921,36 @@ function beginEnemyTurn() {
                 var targetSquare = {x: attackSquares[s].xOffset + alliedUnits[a].x, y: attackSquares[s].yOffset + alliedUnits[a].y}
                 if (moveDetails.validSquares.containsXY(targetSquare)) {
                     moveUnitTo(unit, targetSquare.x, targetSquare.y)
-                    performAttack(unit, alliedUnits[a])
-                    unit.active = false
-                    a = alliedUnits.length
-                    break
+                    moveCursorTo(targetSquare.x, targetSquare.y)
+                    performAttack(unit, alliedUnits[a], startIndex + 1)
+                    return 
                 }
             }
         }
         // If we can't attack, then move close to a unit
         // again, will get that weakness metric
-        if (moveDetails.unit.active) {
-            var dX = unit.x - alliedUnits[0].x
-            var dY = unit.y - alliedUnits[0].y
-            var targetSquare = moveDetails.validSquares.getMinBasedOnMetric(
-                abs(dX) > abs(dY) ? function(o) { return sign(dX) *(o.x)} :
-                                    function(o) { return sign(dY) *(o.y)})
-            moveUnitTo(unit, targetSquare.x, targetSquare.y)
-            moveDetails.unit.active = false
-        }
+        var dX = unit.x - alliedUnits[0].x
+        var dY = unit.y - alliedUnits[0].y
+        var targetSquare = moveDetails.validSquares.getMinBasedOnMetric(
+            abs(dX) > abs(dY) ? function(o) { return sign(dX) *(o.x)} :
+                                function(o) { return sign(dY) *(o.y)})
+        moveUnitTo(unit, targetSquare.x, targetSquare.y)
+        enemyWait = {on: true, ticker: ATTACK_TICKER_AMOUNT, nextIndex: startIndex+1}
+        return
+    } else {
+        beginPlayerTurn()
     }
-    beginPlayerTurn()
 }
 
 function onSetup() {
     cursorOffscreenX = 0 
     cursorOffscreenY = 0
     endMoveMenu = { on : false, selected : 0, options : [], unit : NOUNIT}
-    onLevel = true
+    gameState = START_SCREEN
     /** This could eventually be loaded from some more complex stuff */
-    alliedUnits =  [ { name : "Jaffar", class : "Assassin", Level : 1, weapons : [ "Iron Sword"], Exp: 0 },
-                     { name : "Marth", class : "Assassin", Level : 2, weapons : [ "Iron Sword"], Exp: 0 },
-                     { name : "Eliwood", class : "Assassin", Level : 3, weapons : [ "Iron Sword"], Exp: 0 }]
+    alliedUnits =  [ { name : "Jaffar", class : "Assassin", Level : 1, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}], Exp: 0, weaponLevel : {Sword : 3} },
+                     { name : "Marth", class : "Assassin", Level : 2, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}], Exp: 0, weaponLevel : {Sword : 1} },
+                     { name : "Eliwood", class : "Assassin", Level : 3, weapons : [{weapon: "Iron Sword", uses: 50}], Exp: 0, weaponLevel : {Sword : 3} }]
     setUpAllies()
     cursor  = { img: loadImage('Cursor.png'), x: 0, y: 0, lastPressTime : currentTime()}
     currentMap = loadMap('map1.json', 'TileSet.png')
@@ -742,29 +959,50 @@ function onSetup() {
     allUnits = { "ally" : alliedUnits, "enemy" : enemyUnits}
     unitInspection = {on: false}
     optionsMenu    = {on: false}
+    animateAttack  = {on: false}
+    enemyWait      = {on: false}
     beginPlayerTurn()
 }
 
 function onTick() {
     var beginTime = currentTime()
-    if (onLevel) {
+    if (gameState === ON_LEVEL) {
+        drawMap()
         if (currentTurn === PLAYER) {
-            drawMap()
             drawMoveDetails()
-            drawUnits()
+        }
+        drawCombatDetail()
+        drawUnits()
+        if (openingBanner.on) {
+            drawOpeningBanner()
+            if (--openingBanner.ticker <= 0) {
+                openingBanner.on = false
+                openingBanner.callback()
+            }
+        } else if (currentTurn === PLAYER) {
             drawUnitDetail()
             drawEndMoveMenu()
-            drawCombatDetail()
             drawCursor()
             drawUnitInspection()
             drawOptionsMenu()
             updateCursor()
-            if (noActiveAllies()) {
-                currentTurn = ENEMY
-            }
         } else if (currentTurn === ENEMY) {
+            handleEnemyWait()
+        }
+
+        if (animateAttack.on) {
+            slowApplyAttack()
+            drawMidCombatDetail()
+        }
+        if (noActiveAllies() && currentTurn === PLAYER) {
             beginEnemyTurn()
         }
+    } else if (gameState === LOST) {
+        drawLoseScreen()
+    } else if (gameState === WON) {
+        drawWinScreen()
+    } else if (gameState === START_SCREEN) {
+        drawStartScreen()
     }
     var endTime = currentTime()
     fillText( min(30, floor(1 / (endTime - beginTime))) + "fps", 50,screenHeight-50,'black', 'bold 40px sans-serif')

@@ -31,8 +31,8 @@ var classData = {
             Movement : 0
         },
 
-        weapons : {
-            sword : "C",
+        weaponLevel : {
+            Sword : 3,
         }
 
     }
@@ -65,7 +65,7 @@ var characterData = {
             Resistance : 0,
             Build   : 0,
             Movement : 0
-        },
+        }
     },
 
     Marth : {
@@ -92,7 +92,7 @@ var characterData = {
             Resistance : 0,
             Build   : 0,
             Movement : 0
-        },
+        }
     },
 
     Eliwood : {
@@ -119,7 +119,7 @@ var characterData = {
             Resistance : 0,
             Build   : 0,
             Movement : 0
-        },
+        }
     }
 }
 
@@ -132,7 +132,19 @@ var weaponData = {
             DamageType    : "Physical",
             Range   : 1,
             Type    : "Sword",
-            Level   : "E"
+            Uses    : 50,
+            Level   : 1
+    },
+    "Steel Sword" : {
+            Might   : 8,
+            Hit     : 90,
+            Crit    : 0,
+            Weight  : 8,
+            DamageType    : "Physical",
+            Range   : 1,
+            Type    : "Sword",
+            Uses    : 35,
+            Level   : 3
     }
 }
 
