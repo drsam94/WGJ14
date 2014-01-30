@@ -3,7 +3,15 @@
 "allies"  : [ {"x" : 0, "y" : 0},
               {"x" : 2, "y" : 1},
               {"x" : 1, "y" : 1}],
-"enemies" : [ { "name" : "Ike"   , "class" : "Assassin", "Level" : 6, "weapons" : [ "Iron Sword" ], "x" : 3, "y" : 3, "army" : "enemy"},
+"enemies" : [ { "name" : "Ike"   , "class" : "Assassin", "Level" : 8, "weapons" : [ "Iron Sword" ], "x" : 3, "y" : 3, "army" : "enemy"},
               { "name" : "Nergal"   , "class" : "Assassin", "Level" : 8, "weapons" : [ "Iron Sword" ], "x" : 4, "y" : 4, "army" : "enemy"},
-              { "name" : "Sephiran"   , "class" : "Assassin", "Level" : 10, "weapons" : [ "Iron Sword" ], "x" : 6, "y" : 7, "army" : "enemy"}]
+              { "name" : "Sephiran"   , "class" : "Assassin", "Level" : 12, "weapons" : [ "Steel Sword" ], "x" : 9, "y" : 11, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 4, "weapons" : [ "Iron Sword" ], "x" : 6, "y" : 9, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 4, "weapons" : [ "Iron Sword" ], "x" : 15, "y" : 7, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 2, "y" : 10, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 3, "y" : 8, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 8, "y" : 13, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 7, "y" : 3, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 14, "y" : 2, "army" : "enemy"},
+              { "name" : "Begnion"   , "class" : "Myrmidon", "Level" : 5, "weapons" : [ "Iron Sword" ], "x" : 6, "y" : 1, "army" : "enemy"}]
 }

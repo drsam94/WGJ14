@@ -11,8 +11,8 @@ var classData = {
             Strength  : 10,
             Magic   : 0,
             Defense : 7,
-            Skill   : 15,
-            Speed   : 15,
+            Skill   : 10,
+            Speed   : 10,
             Luck    : 10,
             Resistance : 5,
             Build   : 7,
@@ -25,6 +25,38 @@ var classData = {
             Defense : 30,
             Skill   : 60,
             Speed   : 60,
+            Luck    : 50,
+            Resistance : 20,
+            Build   : 0,
+            Movement : 0
+        },
+
+        weaponLevel : {
+            Sword : 3,
+        }
+
+    },
+
+    Myrmidon : {
+        base : {
+            HP      : 25,
+            Strength  : 8,
+            Magic   : 0,
+            Defense : 7,
+            Skill   : 20,
+            Speed   : 20,
+            Luck    : 10,
+            Resistance : 5,
+            Build   : 7,
+            Movement: 5
+        },
+        growth : {
+            HP      : 90,
+            Strength  : 40,
+            Magic   : 10,
+            Defense : 30,
+            Skill   : 70,
+            Speed   : 70,
             Luck    : 50,
             Resistance : 20,
             Build   : 0,
@@ -146,6 +178,14 @@ var weaponData = {
             Uses    : 35,
             Level   : 3
     }
+}
+
+var itemsData = {
+    "Vulnerary" : { Uses : 3,
+                    Effect : function(unit) {
+                        unit.currentHP += 10
+                        unit.currentHP = min(unit.currentHP, unit.HP)
+                    }}
 }
 
 var terrainData = {

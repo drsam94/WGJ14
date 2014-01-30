@@ -59,6 +59,7 @@ var optionsMenu
 var animateAttack
 var openingBanner
 var enemyWait
+var itemsMenu
 
 function getDirFromKey(key) {
     return (key - 34) % 4
@@ -125,15 +126,11 @@ function drawOptionsMenu() {
 function drawUnitInspection() {
     if (unitInspection.on) {
         var posX
-        var posItemsX
         if (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2) {
             posX = 0
-            posItemsX = tileWidth()*2 + tileWidth()/8
         } else {
             posX = (SCREEN_TILES_X-2) * tileWidth()
-            posItemsX = (SCREEN_TILES_X-3.5)*tileWidth() - tileWidth()/8
         }
-        //ar posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 3)
         fillRectangle(posX,0,tileWidth()*2,tileHeight()*7,'grey')
         var i = 1
         for (stat in STATS) {
@@ -147,11 +144,29 @@ function drawUnitInspection() {
             }
             fillText(str, posX,i++*tileHeight()/2,'black','40px bold sans-serif')
         }
-        fillRectangle(posItemsX,0,tileWidth()*1.5, tileHeight()*4,'grey')
-        var weapons = unitInspection.unit.weapons
+        drawItemsMenu(false)
+    }
+}
+
+function drawItemsMenu(asMenu) {
+    if (!asMenu || itemsMenu.on) {
+        var weapons
+        var posX
+        if (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2) {
+            posX = tileWidth()*2 + tileWidth()/8
+        } else {
+            posX = (SCREEN_TILES_X-3.5)*tileWidth() - tileWidth()/8
+        }
+        if (unitInspection.on) {
+            weapons = unitInspection.unit.weapons
+        } else {
+            weapons = moveDetails.unit.weapons
+        }
         for (i = 0; i < weapons.length; ++i) {
-            fillText(weapons[i].weapon, posItemsX, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'left','hanging')
-            fillText(weapons[i].uses+"", posItemsX+tileWidth()*1.5, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'right', 'hanging')
+            fillRectangle(posX,tileHeight()*(i/2),tileWidth()*1.5, tileHeight()/2,
+                asMenu? makeColor(.8,.8,.8, (itemsMenu.selected == i ? 1 : .5)) : 'grey')
+            fillText(weapons[i].weapon, posX, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'left','hanging')
+            fillText(weapons[i].uses+"", posX+tileWidth()*1.5, (i/2)*tileHeight(), 'black', '40px bold sans-serif', 'right', 'hanging')
         }
     }
 }
@@ -169,7 +184,7 @@ function drawUnitDetail() {
         unit = moveDetails.unit
     }
     if (unit !== NOUNIT) {
-       var posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 2.5)
+       var posX = tileWidth() * (cursor.x - cursorOffscreenX > SCREEN_TILES_X / 2 ? .5 : SCREEN_TILES_X - 2)
        fillRectangle(posX, tileHeight(), 2*tileWidth(), tileHeight(), makeColor(181 / 255, 201 / 255, 199 / 255, .8))
        fillText(unit.name, posX + tileWidth() / 8, tileHeight() * 1.4, 'black', "40px bold sans-serif")
        /** need to actually implement stats eventually */
@@ -268,6 +283,7 @@ function drawEndMoveMenu() {
             if (adjacentToEnemy(endMoveMenu.unit)) {
                 endMoveMenu.options.push("Attack")
             }
+            endMoveMenu.options.push("Items")
             endMoveMenu.options.push("Wait")
             endMoveMenu.selected = 0
         }
@@ -290,10 +306,10 @@ function drawEndMoveMenu() {
 function drawArmy(army) {
     for (var i = 0; i < army.length; ++i) {
         var unit = army[i]
-        drawImage(classNameToSpriteSheet[unit.class][unit.army],
+        drawImage(spriteData[unit.class].sheet[unit.army],
                   toRealX(unit.x), toRealY(unit.y),
                   tileWidth(), tileHeight(),
-                  5 + 20*(floor(currentTime()*3) % 3),30, TILE_DIMENSION, TILE_DIMENSION) 
+                  spriteData[unit.class].start + spriteData[unit.class].width[(floor(currentTime()*3) % 3)],31, TILE_DIMENSION, TILE_DIMENSION) 
         if (!unit.active) {
             fillRectangle(toRealX(unit.x), toRealY(unit.y),
                           tileWidth(), tileHeight(),
@@ -534,6 +550,8 @@ function performMenuSelection(menu) {
         moveCursorTo(unit.x, unit.y)
     } else if (selection === "End") {
         beginEnemyTurn()
+    } else if (selection === "Items") {
+        itemsMenu = { on: true, selected: 0}
     }
     menu.on = false
 }
@@ -729,10 +747,18 @@ function handleMenuKey(key, menu, cancelFunc) {
 }
 
 function canWieldWeapon(unit, weapon) {
-    var wStats = weaponData[weapon]
-    return wStats.Level <= unit.weaponLevel[wStats.Type]
+    var wStats = weaponData[weapon.weapon]
+    return isWeapon(weapon) && wStats.Level <= unit.weaponLevel[wStats.Type]
 }
 
+function isWeapon(weapon) {
+    for (w in weaponData) {
+        if (w === weapon.weapon) {
+            return true
+        }
+    }
+    return false
+}
 function onKeyStart(key) {
     if (gameState === START_SCREEN) {
         gameState = ON_LEVEL
@@ -742,6 +768,28 @@ function onKeyStart(key) {
         if (unitInspection.on) {
             if (key === B_KEY) {
                 unitInspection.on = false
+            }
+        } else if (itemsMenu.on) {
+            if (key === B_KEY) {
+                itemsMenu.on   = false
+                endMoveMenu.on = true
+            } else if (key === A_KEY) {
+                if (isWeapon(moveDetails.unit.weapons[itemsMenu.selected])) {
+                    var temp = moveDetails.unit.weapons[0]
+                    moveDetails.unit.weapons[0] = moveDetails.unit.weapons[itemsMenu.selected]
+                    moveDetails.unit.weapons[itemsMenu.selected] = temp
+                    itemsMenu.on = false
+                    endMoveMenu.on = true
+                } else {
+                    useItem(moveDetails.unit, itemsMenu.selected)
+                }
+            } else if (key === UP_ARROW) {
+                --itemsMenu.selected
+                itemsMenu.selected += moveDetails.unit.weapons.length
+                itemsMenu.selected %= moveDetails.unit.weapons.length
+            } else if (key === DOWN_ARROW) {
+                ++itemsMenu.selected
+                itemsMenu.selected %= moveDetails.unit.weapons.length
             }
         } else if (endMoveMenu.on) {
             handleMenuKey(key, endMoveMenu, 
@@ -778,7 +826,7 @@ function onKeyStart(key) {
                         }
                         moveDetails.unit.weapons = newWeapons
                     }
-                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0].weapon))
+                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0]))
 
             } else if (key === Y_KEY) {
                 do {
@@ -792,7 +840,7 @@ function onKeyStart(key) {
                         newWeapons.push(weapons[0])
                         moveDetails.unit.weapons = newWeapons
                     }
-                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0].weapon))
+                } while (!canWieldWeapon(moveDetails.unit, moveDetails.unit.weapons[0]))
             }
         } else {
             if (isArrow(key)) {
@@ -881,6 +929,14 @@ function noActiveAllies() {
     return true
 }
 
+function useItem(unit, index) {
+    itemsData[unit.weapons[index].weapon].Effect(unit)
+    unit.active = false
+    itemsMenu.on = false
+    if (--unit.weapons[index].uses === 0) {
+        unit.weapons.removeAt(index)
+    }
+}
 function strengthMetric(unit) {
     return unit.Defense
 }
@@ -948,9 +1004,9 @@ function onSetup() {
     endMoveMenu = { on : false, selected : 0, options : [], unit : NOUNIT}
     gameState = START_SCREEN
     /** This could eventually be loaded from some more complex stuff */
-    alliedUnits =  [ { name : "Jaffar", class : "Assassin", Level : 1, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}], Exp: 0, weaponLevel : {Sword : 3} },
-                     { name : "Marth", class : "Assassin", Level : 2, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}], Exp: 0, weaponLevel : {Sword : 1} },
-                     { name : "Eliwood", class : "Assassin", Level : 3, weapons : [{weapon: "Iron Sword", uses: 50}], Exp: 0, weaponLevel : {Sword : 3} }]
+    alliedUnits =  [ { name : "Jaffar", class : "Assassin", Level : 1, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}, {weapon: "Vulnerary", uses: 3}], Exp: 0, weaponLevel : {Sword : 3} },
+                     { name : "Marth", class : "Assassin", Level : 2, weapons : [ {weapon: "Iron Sword", uses: 50}, {weapon: "Steel Sword", uses: 35}, {weapon: "Vulnerary", uses: 3}], Exp: 0, weaponLevel : {Sword : 1} },
+                     { name : "Eliwood", class : "Assassin", Level : 3, weapons : [{weapon: "Iron Sword", uses: 50}, {weapon: "Vulnerary", uses: 3}], Exp: 0, weaponLevel : {Sword : 3} }]
     setUpAllies()
     cursor  = { img: loadImage('Cursor.png'), x: 0, y: 0, lastPressTime : currentTime()}
     currentMap = loadMap('map1.json', 'TileSet.png')
@@ -961,6 +1017,7 @@ function onSetup() {
     optionsMenu    = {on: false}
     animateAttack  = {on: false}
     enemyWait      = {on: false}
+    itemsMenu      = {on: false}
     beginPlayerTurn()
 }
 
@@ -971,8 +1028,8 @@ function onTick() {
         if (currentTurn === PLAYER) {
             drawMoveDetails()
         }
-        drawCombatDetail()
         drawUnits()
+        drawCombatDetail()
         if (openingBanner.on) {
             drawOpeningBanner()
             if (--openingBanner.ticker <= 0) {
@@ -983,13 +1040,13 @@ function onTick() {
             drawUnitDetail()
             drawEndMoveMenu()
             drawCursor()
+            drawItemsMenu(true)
             drawUnitInspection()
             drawOptionsMenu()
             updateCursor()
-        } else if (currentTurn === ENEMY) {
+        } else if (currentTurn === ENEMY && !openingBanner.on) {
             handleEnemyWait()
         }
-
         if (animateAttack.on) {
             slowApplyAttack()
             drawMidCombatDetail()
